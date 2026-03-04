@@ -122,13 +122,35 @@ Canvas and DOM measure emoji at different widths on macOS (Chrome):
 | 28px+ | matches | matches | 0 |
 
 Properties:
-- Same across all font families (Helvetica, Arial, Georgia, monospace)
-- Same for all emoji tested (🚀🎯👏🦊🐕🏠😴)
-- DOM scales linearly: emoji width = font size
+- Same across all font families — verified across 7 fonts (Helvetica, Arial, Georgia, Times New Roman, Verdana, Courier New, Trebuchet MS). The diff is identical for every font at every size.
+- Same for all emoji types tested (59 emoji: simple, ZWJ sequences, flags, skin tones, keycaps)
+- Additive per emoji grapheme: "👏👏👏" diff = 3 × single diff
+- DOM scales linearly: emoji width = font size (for ≥12px)
 - Canvas inflates at small sizes, converges at ≥24px
+- CSS line-breaking uses the DOM (visual) width, not the inflated canvas width
 - This is a Chrome/macOS issue with Apple Color Emoji rendering pipeline
 
-Not yet fixed. A correction table by font size (one-time DOM read at startup) could work.
+Complete correction table (all integer sizes):
+
+| Size | Canvas | DOM | Diff |
+|---|---|---|---|
+| 10px | 13px | 11px | +2 |
+| 11px | 14px | 11.5px | +2.5 |
+| 12px | 15px | 12px | +3 |
+| 13px | 16px | 13px | +3 |
+| 14px | 18px | 14px | +4 |
+| 15px | 19px | 15px | +4 |
+| 16px | 20px | 16px | +4 |
+| 17px | 21px | 17px | +4 |
+| 18px | 21px | 18px | +3 |
+| 19px | 22px | 19px | +3 |
+| 20px | 22px | 20px | +2 |
+| 21px | 23px | 21px | +2 |
+| 22px | 23px | 22px | +1 |
+| 23px | 24px | 23px | +1 |
+| 24px+ | matches | matches | 0 |
+
+**Fix implemented**: auto-detect by measuring `ctx.measureText("😀").width - fontSize`. If positive, subtract per emoji grapheme. Detection uses `\p{Emoji_Presentation}` regex + VS16 check. Result: Chrome 99.4% → 99.7%.
 
 ## Discovery: HarfBuzz guessSegmentProperties RTL bug
 
@@ -196,11 +218,12 @@ Safari's CSS engine may treat bidi script boundaries as preferred break points. 
 ## Accuracy summary
 
 Browser (canvas measureText, named font):
-- Chrome: 3816/3840 (99.4%) across 2 fonts × 8 sizes × 8 widths × 30 texts
-  - Remaining 24 mismatches: all emoji at small font sizes (canvas width inflation bug)
+- Chrome: 3829/3840 (99.7%) across 2 fonts × 8 sizes × 8 widths × 30 texts
+  - Remaining 11 mismatches: CJK kinsoku at narrow widths, one Latin measurement edge case, one bidi boundary break
+  - Emoji correction eliminated all 24 previous emoji mismatches
 - Safari: 3792/3840 (98.8%)
   - Remaining 48 mismatches: emoji breaks, CJK kinsoku, bidi boundaries (CSS rule differences)
-- Firefox: untested at scale but has same emoji inflation as Chrome (worse: +5px at 15px vs Chrome's +4px, converges at 28px vs Chrome's 24px)
+- Firefox: untested at scale but has same emoji inflation as Chrome (worse: +5px at 15px vs Chrome's +4px, converges at 28px vs Chrome's 24px). Auto-correction should handle it.
 
 Headless (HarfBuzz, Arial Unicode):
 - 1472/1472 (100%) word-sum vs full-line measurement

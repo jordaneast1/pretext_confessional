@@ -40,22 +40,22 @@ Tested across 2 fonts × 8 sizes × 8 widths × 30 i18n texts (3840 tests):
 
 | Browser | Match rate | Remaining mismatches |
 |---|---|---|
-| Chrome | 99.4% | Emoji canvas width inflation (browser bug) |
+| Chrome | 99.7% | CJK kinsoku at narrow widths, measurement edge cases |
 | Safari | 98.8% | CSS line-breaking rule differences (emoji breaks, CJK kinsoku, bidi) |
 | Headless (HarfBuzz) | 100% | Algorithm is exact |
 
-Chrome's emoji mismatches are a [browser bug](chromium-bug/issue.md) — canvas `measureText` returns inflated widths for emoji at small font sizes. Safari's mismatches are CSS line-breaking behavior differences (not measurement errors). See [RESEARCH.md](RESEARCH.md) for details.
+Chrome's remaining mismatches are CJK line-breaking rule differences (kinsoku) and a few measurement edge cases at narrow widths. Safari's mismatches are CSS line-breaking behavior differences (not measurement errors). See [RESEARCH.md](RESEARCH.md) for details.
 
 ## i18n
 
 - **Line breaking**: `Intl.Segmenter` with `granularity: 'word'` handles CJK (per-character breaks), Thai, Arabic, and all scripts the browser supports.
 - **Bidi**: Unicode Bidirectional Algorithm (UAX #9) for mixed LTR/RTL text. Pure LTR text fast-paths with zero overhead.
 - **Shaping**: canvas `measureText()` uses the browser's font engine, so ligatures, kerning, and contextual forms (Arabic connected letters) are handled correctly.
-- **Emoji**: works, but canvas measures them 4px wider than DOM at small sizes on macOS. Converges at ≥24px.
+- **Emoji**: auto-corrected. Chrome/Firefox canvas inflates emoji widths at small font sizes on macOS; the library detects and compensates automatically.
 
 ## Known limitations
 
-- **Emoji width**: canvas and DOM disagree on emoji metrics at font sizes <24px on macOS. The DOM renders emoji at exactly the font size; canvas inflates them. This is a Chrome/macOS issue with Apple Color Emoji, not algorithmic.
+- **CJK kinsoku**: Chrome's CSS engine prohibits certain CJK punctuation from starting/ending lines. Our algorithm doesn't implement these rules, causing a few mismatches at narrow widths.
 - **`system-ui` font**: canvas and DOM resolve this CSS keyword to different font variants at certain sizes on macOS. Use a named font (Inter, Helvetica, Arial, etc.) for guaranteed accuracy.
 - **Server-side**: requires a canvas implementation (browser, or `@napi-rs/canvas` with registered fonts). Headless tests use HarfBuzz (WASM) instead.
 
@@ -65,8 +65,9 @@ Chrome's emoji mismatches are a [browser bug](chromium-bug/issue.md) — canvas 
 2. **Punctuation merging**: `"better."` is measured as one unit, not `"better"` + `"."`. This reduces accumulation error from summing individual measurements (up to 2.6px at 28px font without merging).
 3. **CJK splitting**: CJK word segments are re-split into individual graphemes, since CSS allows line breaks between any CJK characters.
 4. **Measurement**: each segment is measured via canvas `measureText()` and cached per (segment, font). Common words across texts share cache entries.
-5. **Bidi classification**: characters are classified into bidi types, embedding levels are computed. Pure LTR text skips this entirely.
-6. **Layout** (per resize): walk the cached widths, accumulate per line, break when exceeding `maxWidth`. Trailing whitespace hangs past the edge (CSS behavior). Punctuation overflow triggers break before the last word. Segments wider than `maxWidth` are broken at grapheme boundaries. Bidi reordering is applied per completed line.
+5. **Emoji correction**: canvas `measureText` inflates emoji widths on Chrome/Firefox at font sizes <24px on macOS. Auto-detected by measuring a reference emoji; correction subtracted per emoji grapheme. Constant across all emoji types and font families. Safari is unaffected (correction = 0).
+6. **Bidi classification**: characters are classified into bidi types, embedding levels are computed. Pure LTR text skips this entirely.
+7. **Layout** (per resize): walk the cached widths, accumulate per line, break when exceeding `maxWidth`. Trailing whitespace hangs past the edge (CSS behavior). Non-space overflow (words, emoji, punctuation) triggers a line break. Segments wider than `maxWidth` are broken at grapheme boundaries. Bidi reordering is applied per completed line.
 
 ## Research
 

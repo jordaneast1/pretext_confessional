@@ -24,22 +24,24 @@ DOM-free text measurement using canvas `measureText()` + `Intl.Segmenter`. Two-p
 
 - Canvas over DOM: no read/write interleaving. Zero DOM reads in prepare() or layout().
 - Intl.Segmenter over split(' '): handles CJK (per-character breaks), Thai, all scripts.
-- Punctuation merged into preceding word: "better." measured as one unit. Reduces accumulation error (up to 2.6px at 28px without merging). Only merges into non-space preceding segments.
+- Punctuation merged into preceding word-like segments: "better." measured as one unit. Reduces accumulation error (up to 2.6px at 28px without merging). Only merges into word-like preceding segments (not spaces — that would hide content from line-breaking).
 - Trailing whitespace hangs past line edge (CSS behavior): spaces that overflow don't trigger breaks.
+- Emoji correction: auto-detected per font size. Canvas inflates emoji widths on Chrome/Firefox at <24px; correction is constant per emoji grapheme, font-independent. Safari is unaffected (correction=0).
+- Non-word, non-space segments (emoji, parens) are break points: CSS breaks at the preceding space, so these overflow like words, not like trailing whitespace.
 - HarfBuzz with explicit LTR for headless tests: guessSegmentProperties assigns wrong direction to isolated Arabic words.
 
 ### Accuracy
 
-- Chrome: 99.4% (3816/3840). Remaining: emoji canvas width inflation (Chrome bug, filed).
+- Chrome: 99.7% (3829/3840). Remaining: CJK kinsoku at narrow widths, one Latin measurement edge case, one bidi boundary break.
 - Safari: 98.8% (3792/3840). Remaining: CSS line-breaking rule differences — emoji break opportunities, CJK kinsoku, bidi boundary breaks. NOT measurement errors.
-- Firefox: similar emoji issue to Chrome but worse (+5px at 15px, converges at 28px).
+- Firefox: similar emoji issue to Chrome but auto-corrected (+5px at 15px, converges at 28px).
 - Headless (HarfBuzz): 100% (1472/1472). Algorithm is exact.
 
 ### Known limitations
 
-- Emoji: Chrome/Firefox canvas measures emoji wider than DOM at font sizes <24px. Safari is fine. This is a browser bug (repro in `chromium-bug/`).
 - system-ui font: canvas and DOM resolve to different optical variants on macOS. Use named fonts.
-- Safari CSS rules: kinsoku (CJK punctuation line-start prohibition), emoji-as-break-point, bidi boundary breaks differ from our algorithm. Would need CSS line-breaking spec implementation to fix.
+- CJK kinsoku: Chrome's CSS engine prohibits certain CJK punctuation from starting/ending lines. Our algorithm doesn't implement these rules.
+- Safari CSS rules: kinsoku, emoji-as-break-point, bidi boundary breaks differ from our algorithm. Would need CSS line-breaking spec implementation to fix.
 - Server-side: needs canvas or @napi-rs/canvas with registered fonts. HarfBuzz works for testing.
 
 ### Related

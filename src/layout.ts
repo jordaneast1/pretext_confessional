@@ -17,9 +17,12 @@
 //   Trailing whitespace: hangs past line edge without triggering breaks (CSS behavior).
 //   overflow-wrap: pre-measured grapheme widths enable character-level word breaking.
 //
+// Emoji correction: Chrome/Firefox canvas measures emoji wider than DOM at font
+//   sizes <24px on macOS (Apple Color Emoji). The inflation is constant per emoji
+//   grapheme at a given size, font-independent. Auto-detected by measuring a
+//   reference emoji and comparing to fontSize. Safari is unaffected (correction = 0).
+//
 // Limitations:
-//   - Emoji: canvas measures 4px wider than DOM at font sizes <24px on macOS.
-//     This is a browser pipeline difference (Apple Color Emoji), not algorithmic.
 //   - system-ui font: canvas resolves to different optical variants than DOM on macOS.
 //     Use named fonts (Helvetica, Inter, etc.) for guaranteed accuracy.
 //
@@ -57,6 +60,25 @@ function measureSegment(seg: string, cache: Map<string, number>): number {
 function parseFontSize(font: string): number {
   const m = font.match(/(\d+(?:\.\d+)?)\s*px/)
   return m ? parseFloat(m[1]!) : 16
+}
+
+// Emoji correction: canvas measureText inflates emoji widths on Chrome/Firefox
+// at font sizes <24px on macOS. The inflation is per-emoji-grapheme, constant
+// across all emoji types (simple, ZWJ, flags, skin tones, keycaps) and all font
+// families. Auto-detected by measuring a reference emoji vs fontSize.
+
+const emojiPresentationRe = /\p{Emoji_Presentation}/u
+
+function isEmojiGrapheme(g: string): boolean {
+  return emojiPresentationRe.test(g) || g.includes('\uFE0F')
+}
+
+function countEmojiGraphemes(text: string, segmenter: Intl.Segmenter): number {
+  let count = 0
+  for (const g of segmenter.segment(text)) {
+    if (isEmojiGrapheme(g.segment)) count++
+  }
+  return count
 }
 
 // CJK characters don't use spaces between words. Intl.Segmenter with
@@ -272,14 +294,21 @@ export type LayoutResult = {
 //   4. Split CJK words into individual graphemes (per-character line breaks)
 //   5. Measure each segment via canvas measureText, cache by (segment, font)
 //   6. Pre-measure graphemes of long words (for overflow-wrap: break-word)
-//   7. Compute bidi embedding levels for mixed-direction text
+//   7. Correct emoji canvas inflation (auto-detected per font size)
+//   8. Compute bidi embedding levels for mixed-direction text
 export function prepare(text: string, font: string, lineHeight?: number): PreparedText {
   ctx.font = font
   const cache = getWordCache(font)
+  const fontSize = parseFontSize(font)
 
   if (lineHeight === undefined) {
-    lineHeight = Math.round(parseFontSize(font) * 1.2)
+    lineHeight = Math.round(fontSize * 1.2)
   }
+
+  // Auto-detect emoji canvas inflation. On Chrome/Firefox macOS, canvas measures
+  // emoji wider than DOM at small sizes. Correction is 0 on Safari or ≥24px.
+  const emojiCanvasW = ctx.measureText('\u{1F600}').width
+  const emojiCorrection = emojiCanvasW > fontSize + 0.5 ? emojiCanvasW - fontSize : 0
 
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
   // CSS white-space: normal collapses newlines to spaces. For pre-wrap behavior,
@@ -298,11 +327,13 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
   const segStarts: number[] = []
   const breakableWidths: (number[] | null)[] = []
 
-  // Merge punctuation into preceding word segments. Without this,
+  // Merge punctuation into preceding word-like segments. Without this,
   // measureText("better") + measureText(".") can differ from measureText("better.")
   // by enough to cause off-by-one line breaks at borderline widths (up to 2.6px
   // accumulation error at 28px font). Merging also matches CSS behavior where
   // punctuation is visually attached to its word and not broken separately.
+  // Only merge into word-like segments — merging into spaces would make
+  // content (emoji, parens) invisible to line-breaking.
   const rawSegs = [...segments]
   const merged: { text: string, isWordLike: boolean, isSpace: boolean, start: number }[] = []
 
@@ -310,7 +341,7 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
     const s = rawSegs[i]!
     const ws = !s.isWordLike && /^\s+$/.test(s.segment)
 
-    if (!s.isWordLike && !ws && merged.length > 0) {
+    if (!s.isWordLike && !ws && merged.length > 0 && merged[merged.length - 1]!.isWordLike) {
       merged[merged.length - 1]!.text += s.segment
     } else {
       merged.push({ text: s.segment, isWordLike: s.isWordLike ?? false, isSpace: ws, start: s.index })
@@ -321,14 +352,23 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
     if (seg.isWordLike && isCJK(seg.text)) {
       const graphemes = graphemeSegmenter.segment(seg.text)
       for (const g of graphemes) {
-        widths.push(measureSegment(g.segment, cache))
+        let w = measureSegment(g.segment, cache)
+        if (emojiCorrection > 0 && isEmojiGrapheme(g.segment)) {
+          w -= emojiCorrection
+        }
+        widths.push(w)
         isWordLike.push(true)
         isSpace.push(false)
         segStarts.push(seg.start + g.index)
         breakableWidths.push(null)
       }
     } else {
-      widths.push(measureSegment(seg.text, cache))
+      let w = measureSegment(seg.text, cache)
+      if (emojiCorrection > 0) {
+        const ec = countEmojiGraphemes(seg.text, graphemeSegmenter)
+        if (ec > 0) w -= ec * emojiCorrection
+      }
+      widths.push(w)
       isWordLike.push(seg.isWordLike)
       isSpace.push(seg.isSpace)
       segStarts.push(seg.start)
@@ -337,7 +377,11 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
         if (graphemes.length > 1) {
           const gWidths = new Array<number>(graphemes.length)
           for (let gi = 0; gi < graphemes.length; gi++) {
-            gWidths[gi] = measureSegment(graphemes[gi]!.segment, cache)
+            let gw = measureSegment(graphemes[gi]!.segment, cache)
+            if (emojiCorrection > 0 && isEmojiGrapheme(graphemes[gi]!.segment)) {
+              gw -= emojiCorrection
+            }
+            gWidths[gi] = gw
           }
           breakableWidths.push(gWidths)
         } else {
@@ -385,7 +429,6 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: nu
     let lineW = 0
     let hasContent = false
     let lineStart = 0
-    let lastWordIdx = -1
 
     for (let i = 0; i < widths.length; i++) {
       const w = widths[i]!
@@ -405,13 +448,11 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: nu
           }
           hasContent = true
           lineStart = i
-          lastWordIdx = -1
         } else {
           lineW = w
           hasContent = true
           lineCount++
           lineStart = i
-          lastWordIdx = isWord[i] ? i : -1
         }
         continue
       }
@@ -425,11 +466,10 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: nu
         } else if (isSp[i]) {
           // Trailing whitespace hangs past the line edge (CSS behavior)
           continue
-        } else if (lastWordIdx > lineStart) {
-          breakIdx = lastWordIdx
         } else {
-          lineW = newW
-          continue
+          // Non-word, non-space (emoji, punctuation, parens, etc.)
+          // CSS breaks at the preceding space, putting this on the next line.
+          breakIdx = i
         }
 
         if (segLevels !== null) {
@@ -439,12 +479,8 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: nu
         lineStart = breakIdx
         lineCount++
         lineW = 0
-        lastWordIdx = -1
         for (let j = breakIdx; j <= i; j++) {
           lineW += widths[j]!
-          if (isWord[j]) {
-            lastWordIdx = j
-          }
         }
 
         if (breakIdx === i && w > maxWidth && breakableWidths[i] !== null) {
@@ -463,9 +499,6 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: nu
         }
       } else {
         lineW = newW
-        if (isWord[i]) {
-          lastWordIdx = i
-        }
       }
     }
 
