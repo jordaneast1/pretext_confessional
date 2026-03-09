@@ -118,6 +118,11 @@ describe('prepare invariants', () => {
     expect(prepared.segments).toEqual(['invented,', ' ', '“‘George', ' ', 'B.', ' ', 'Wilson'])
   })
 
+  test('does not attach opening punctuation to following whitespace', () => {
+    const prepared = prepareWithSegments('“ hello', FONT)
+    expect(prepared.segments).toEqual(['“', ' ', 'hello'])
+  })
+
   test('keeps em dashes breakable', () => {
     const prepared = prepareWithSegments('universe—so', FONT)
     expect(prepared.segments).toEqual(['universe', '—', 'so'])

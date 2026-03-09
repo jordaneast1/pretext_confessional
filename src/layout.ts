@@ -455,7 +455,7 @@ function buildMergedSegmentation(normalized: string): MergedSegmentation {
     if (!mergedSpace[i]! && !mergedWordLike[i]! && isForwardStickyClusterSegment(mergedTexts[i]!)) {
       let j = i + 1
       while (j < mergedLen && mergedTexts[j] === '') j++
-      if (j < mergedLen) {
+      if (j < mergedLen && !mergedSpace[j]!) {
         mergedTexts[j] = mergedTexts[i]! + mergedTexts[j]!
         mergedStarts[j] = mergedStarts[i]!
         mergedTexts[i] = ''
@@ -463,8 +463,26 @@ function buildMergedSegmentation(normalized: string): MergedSegmentation {
     }
   }
 
+  let compactLen = 0
+  for (let read = 0; read < mergedLen; read++) {
+    const text = mergedTexts[read]!
+    if (text.length === 0) continue
+    if (compactLen !== read) {
+      mergedTexts[compactLen] = text
+      mergedWordLike[compactLen] = mergedWordLike[read]!
+      mergedSpace[compactLen] = mergedSpace[read]!
+      mergedStarts[compactLen] = mergedStarts[read]!
+    }
+    compactLen++
+  }
+
+  mergedTexts.length = compactLen
+  mergedWordLike.length = compactLen
+  mergedSpace.length = compactLen
+  mergedStarts.length = compactLen
+
   return {
-    len: mergedLen,
+    len: compactLen,
     texts: mergedTexts,
     isWordLike: mergedWordLike,
     isSpace: mergedSpace,
@@ -553,49 +571,64 @@ function measureAnalysis(
   const breakableWidths: (number[] | null)[] = []
   const segments = includeSegments ? [] as string[] : null
 
+  function pushMeasuredSegment(
+    text: string,
+    width: number,
+    space: boolean,
+    start: number,
+    breakable: number[] | null,
+  ): void {
+    widths.push(width)
+    isSpace.push(space)
+    segStarts.push(start)
+    breakableWidths.push(breakable)
+    if (segments !== null) segments.push(text)
+  }
+
   for (let mi = 0; mi < analysis.len; mi++) {
     const segText = analysis.texts[mi]!
-    if (segText.length === 0) continue
-
     const segWordLike = analysis.isWordLike[mi]!
     const segIsSpace = analysis.isSpace[mi]!
     const segStart = analysis.starts[mi]!
 
     if (isCJK(segText)) {
-      let gLen = 0
-      const gTexts: string[] = []
-      const gStarts: number[] = []
+      let unitText = ''
+      let unitStart = 0
+
       for (const gs of sharedGraphemeSegmenter.segment(segText)) {
-        gTexts[gLen] = gs.segment
-        gStarts[gLen] = gs.index
-        gLen++
-      }
+        const grapheme = gs.segment
 
-      for (let gi = 0; gi < gLen; gi++) {
-        let unitText = gTexts[gi]!
-        const unitStart = gStarts[gi]!
-
-        if (kinsokuEnd.has(unitText) && gi + 1 < gLen) {
-          unitText += gTexts[gi + 1]!
-          gi++
+        if (unitText.length === 0) {
+          unitText = grapheme
+          unitStart = gs.index
+          continue
         }
-        while (
-          gi + 1 < gLen &&
-          (kinsokuStart.has(gTexts[gi + 1]!) || leftStickyPunctuation.has(gTexts[gi + 1]!))
+
+        if (
+          kinsokuEnd.has(unitText) ||
+          kinsokuStart.has(grapheme) ||
+          leftStickyPunctuation.has(grapheme)
         ) {
-          unitText += gTexts[gi + 1]!
-          gi++
+          unitText += grapheme
+          continue
         }
 
         let w = measureSegment(unitText, cache)
         if (emojiCorrection > 0 && isEmojiGrapheme(unitText)) {
           w -= emojiCorrection
         }
-        widths.push(w)
-        isSpace.push(false)
-        segStarts.push(segStart + unitStart)
-        breakableWidths.push(null)
-        if (segments !== null) segments.push(unitText)
+        pushMeasuredSegment(unitText, w, false, segStart + unitStart, null)
+
+        unitText = grapheme
+        unitStart = gs.index
+      }
+
+      if (unitText.length > 0) {
+        let w = measureSegment(unitText, cache)
+        if (emojiCorrection > 0 && isEmojiGrapheme(unitText)) {
+          w -= emojiCorrection
+        }
+        pushMeasuredSegment(unitText, w, false, segStart + unitStart, null)
       }
       continue
     }
@@ -604,9 +637,6 @@ function measureAnalysis(
     if (emojiCorrection > 0 && emojiPresentationRe.test(segText)) {
       w -= countEmojiGraphemes(segText) * emojiCorrection
     }
-    widths.push(w)
-    isSpace.push(segIsSpace)
-    segStarts.push(segStart)
 
     if (segWordLike && segText.length > 1) {
       let gCount = 0
@@ -620,12 +650,10 @@ function measureAnalysis(
         gWidths![gCount] = gw
         gCount++
       }
-      breakableWidths.push(gCount > 1 ? gWidths : null)
+      pushMeasuredSegment(segText, w, segIsSpace, segStart, gCount > 1 ? gWidths : null)
     } else {
-      breakableWidths.push(null)
+      pushMeasuredSegment(segText, w, segIsSpace, segStart, null)
     }
-
-    if (segments !== null) segments.push(segText)
   }
 
   const segLevels = computeSegmentLevels(analysis.normalized, segStarts)
@@ -637,9 +665,6 @@ function measureAnalysis(
 
 function prepareInternal(text: string, font: string, includeSegments: boolean): PreparedText | PreparedTextWithSegments {
   const analysis = analyzeText(text)
-  if (analysis.len === 0) {
-    return createEmptyPrepared(includeSegments)
-  }
   return measureAnalysis(analysis, font, includeSegments)
 }
 

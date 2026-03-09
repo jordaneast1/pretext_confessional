@@ -61,6 +61,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - Creative responsive magazine-like layout contouring some shapes
 - Revisit whitespace normalization only for the remaining NBSP / hard-space edge cases, not ordinary collapsible whitespace
 - Make `src/layout.ts` import-safe in non-DOM runtimes and add an explicit server canvas backend path
+- Decide whether explicit hard line breaks / paragraph-aware layout belong in scope beyond the current `white-space: normal` collapsing model
 - Decide whether automatic hyphenation / soft-hyphen support is in scope for this repo
 - Decide whether intrinsic sizing / logical width APIs are needed beyond fixed-width height prediction
 - Decide whether bidi rendering strategy work (selection / copy-paste preserving runs) belongs here or stays out of scope
