@@ -73,6 +73,10 @@ type CorpusLineMismatch = {
 
 type CorpusBreakMismatch = {
   line: number
+  oursStart: number
+  browserStart: number
+  oursEnd: number
+  browserEnd: number
   oursContext: string
   browserContext: string
   deltaText: string
@@ -608,6 +612,10 @@ function getFirstBreakMismatch(
       const maxEnd = Math.max(oursEnd, browserEnd)
       return {
         line: i + 1,
+        oursStart: ours?.start ?? -1,
+        browserStart: browser?.start ?? -1,
+        oursEnd,
+        browserEnd,
         oursContext: formatBreakContext(normalizedText, oursEnd),
         browserContext: formatBreakContext(normalizedText, browserEnd),
         deltaText: normalizedText.slice(minEnd, maxEnd),

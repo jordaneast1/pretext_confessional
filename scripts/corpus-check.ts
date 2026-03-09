@@ -56,6 +56,10 @@ type CorpusReport = {
   } | null
   firstBreakMismatch?: {
     line: number
+    oursStart: number
+    browserStart: number
+    oursEnd: number
+    browserEnd: number
     oursContext: string
     browserContext: string
     deltaText: string
@@ -177,6 +181,7 @@ function printReport(report: CorpusReport): void {
   if (report.firstBreakMismatch !== null && report.firstBreakMismatch !== undefined) {
     const mismatch = report.firstBreakMismatch
     console.log(`  break L${mismatch.line}: ${mismatch.reasonGuess}`)
+    console.log(`  offsets: ours ${mismatch.oursStart}-${mismatch.oursEnd} | browser ${mismatch.browserStart}-${mismatch.browserEnd}`)
     console.log(`  delta: ${JSON.stringify(mismatch.deltaText)}`)
     console.log(`  ours:    ${mismatch.oursContext}`)
     console.log(`  browser: ${mismatch.browserContext}`)
