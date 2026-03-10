@@ -1,6 +1,6 @@
 ## Pretext
 
-Internal notes for contributors and agents. Use `README.md` as the public source of truth for API examples, benchmark/accuracy numbers, and user-facing limitations. Use `RESEARCH.md` for the detailed exploration log.
+Internal notes for contributors and agents. Use `README.md` as the public source of truth for API examples and user-facing limitations. Use `STATUS.md` for the compact current browser-accuracy / benchmark snapshot, `corpora/STATUS.md` for the compact corpus snapshot, and `RESEARCH.md` for the detailed exploration log.
 
 ### Commands
 

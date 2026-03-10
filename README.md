@@ -35,17 +35,12 @@ const { height, lineCount } = layout(block, containerWidth, 19)
 
 ## Performance
 
-Measured on a MacBook Pro (Apple M2 Pro, 12 CPU cores, 16 GB RAM, macOS 26.3, arm64).
+`prepare()` is the one-time setup cost when text first appears. `layout()` is the resize hot path and stays very small relative to DOM measurement on the shared 500-text benchmark, while also keeping the long-form corpus rows practical enough for real use.
 
-500 comments, resize to a new width (the hot path):
-
-| Browser | prepare() | layout() | DOM batch | DOM interleaved |
-|---|---|---|---|---|
-| Chrome | 29.80ms | **0.03ms** | 4.00ms | 41.80ms |
-| Firefox | 15.00ms | **0.06ms** | 11.00ms | 79.00ms |
-| Safari | 16.00ms | **0.04ms** | 80.00ms | 142.50ms |
-
-`prepare()` is the one-time setup cost when text first appears. `layout()` is the resize hot path and stays comfortably sub-0.1ms per 500-text batch on this workload. See [pages/benchmark-results.txt](pages/benchmark-results.txt) for the checked-in snapshot and [pages/benchmark.ts](pages/benchmark.ts) for the live benchmark harness.
+See:
+- [STATUS.md](STATUS.md) for the current compact benchmark snapshot
+- [pages/benchmark-results.txt](pages/benchmark-results.txt) for the older checked-in cross-browser raw snapshot
+- [pages/benchmark.ts](pages/benchmark.ts) for the live benchmark harness
 
 ## Accuracy
 
@@ -56,7 +51,8 @@ Tested across 4 fonts × 8 sizes × 8 widths × 30 i18n texts (7680 tests):
 | Chrome | 100.00% | 7680 | None on the current browser sweep |
 | Safari | 100.00% | 7680 | None on the current browser sweep |
 | Firefox | 100.00% | 7680 | None on the current browser sweep |
-Tested across 4 fonts (Helvetica Neue, Georgia, Verdana, Courier New) × 8 sizes × 8 widths × 30 i18n texts. The browser sweep is now clean on fresh runs in Chrome, Safari, and Firefox. See [RESEARCH.md](RESEARCH.md) for the exploration log and the remaining Gatsby canary edge cases.
+
+Tested across 4 fonts (Helvetica Neue, Georgia, Verdana, Courier New) × 8 sizes × 8 widths × 30 i18n texts. See [STATUS.md](STATUS.md) for the compact current snapshot, [corpora/STATUS.md](corpora/STATUS.md) for the long-form corpus canaries, and [RESEARCH.md](RESEARCH.md) for the exploration log.
 
 ## i18n
 

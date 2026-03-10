@@ -2,6 +2,7 @@
 
 Everything we tried, measured, and learned while building this library.
 
+For the current compact browser-accuracy / benchmark snapshot, see `STATUS.md`.
 For the current compact corpus / sweep snapshot, see `corpora/STATUS.md`.
 
 ## The problem: DOM measurement interleaving
