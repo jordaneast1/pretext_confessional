@@ -31,6 +31,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - `pages/bubbles.ts` — bubble shrinkwrap demo
 - `pages/demo.ts` — manual line-placement demo built on `layoutWithLines()`
 - `pages/columns.ts` — three-column userland reflow demo built from one `layoutWithLines()` result
+- `pages/contour.ts` — variable-width contour demo built by advancing with `layoutNextLine()`
 
 ### Implementation notes
 
@@ -50,6 +51,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - `NBSP`-style glue should survive `prepare()` as visible content and prevent ordinary word-boundary wrapping; `ZWSP` should survive as a zero-width break opportunity.
 - Soft hyphens should stay invisible when unbroken, but if the engine chooses that break, the broken line should expose a visible trailing hyphen in `layoutWithLines()`.
 - `layoutWithLines()` now exposes `trailingDiscretionaryHyphen` on each line, so userland renderers can tell when a visible trailing hyphen was inserted by a soft-hyphen break instead of coming from source text.
+- `layoutNextLine()` is the rich-path escape hatch for variable-width userland layout. Keep it semantically aligned with `layoutWithLines()`, but do not pull its extra bookkeeping into the hot `layout()` path.
 - Astral CJK ideographs must still hit the CJK path; do not rely on BMP-only `charCodeAt()` checks there.
 - Non-word, non-space segments are break opportunities, same as words.
 - CJK grapheme splitting plus kinsoku merging keeps prohibited punctuation attached to adjacent graphemes.
@@ -95,6 +97,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - Decide whether line-fit tolerance should stay as a browser-specific shim or move to runtime calibration alongside emoji correction.
 - If a future Arabic corpus still exposes misses after preprocessing and corpus cleanup, decide whether that needs a richer break-policy model or a truly shaping-aware architecture beyond segment-sum layout.
 - `layoutWithLines()` now returns line boundary cursors (`start` / `end`) in addition to `{ text, width }`; keep that data model useful for future manual reflow work.
+- The contour demo is the first real consumer of per-line variable widths. If a future custom-layout page wants more metadata, make it prove that need there before expanding the rich API again.
 - ASCII fast path could skip some CJK, bidi, and emoji overhead.
 - Benchmark methodology still needs review.
 - Additional CSS configs are still untested: `break-all`, `keep-all`, `strict`, `loose`, `anywhere`, `pre-wrap`.
@@ -106,7 +109,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 ### TODO
 - TweetDeck-style 3 columns of the same text scrolling at the same time
 - Resize Old Man and the Sea
-- Creative responsive magazine-like layout contouring some shapes
+- Push the contour + columns demos toward richer editorial layouts instead of isolated experiments
 - Revisit whitespace normalization only for the remaining NBSP / hard-space edge cases, not ordinary collapsible whitespace
 - Decide whether to add an explicit server canvas backend path now that `src/layout.ts` imports safely in non-DOM runtimes
 - Decide whether explicit hard line breaks / paragraph-aware layout belong in scope beyond the current `white-space: normal` collapsing model

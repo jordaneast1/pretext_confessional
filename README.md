@@ -23,7 +23,7 @@ const { height, lineCount } = layout(block, containerWidth, 19)
 
 `prepare()` does a one-time text analysis pass (whitespace normalization, segmentation, punctuation/CJK fixes), then measures the resulting segments via canvas and caches the widths. On browsers that need emoji correction, it also does one cached DOM calibration read per font. `layout()` walks the cached widths to count lines and multiplies by the caller-provided `lineHeight` — no canvas, no DOM, no string operations. Each `layout()` call is ~0.0002ms.
 
-`prepare()` intentionally returns an opaque handle for the hot path. If you need the richer segment-level structure for diagnostics or custom line rendering, use `prepareWithSegments()` and treat that result as the experimental escape hatch.
+`prepare()` intentionally returns an opaque handle for the hot path. If you need the richer segment-level structure for diagnostics or custom line rendering, use `prepareWithSegments()` and treat that result as the experimental escape hatch. Rich-path helpers like `layoutWithLines()` and `layoutNextLine()` live there on purpose, so variable-width or custom userland layout experiments do not leak complexity into the fast height-estimate path.
 
 If your app wants `Intl.Segmenter` to use a specific locale instead of the runtime default, call `setLocale(locale)` before future `prepare()` calls. `setLocale()` resets the shared caches and retargets the hoisted word segmenter for subsequent text analysis.
 
@@ -34,7 +34,7 @@ If your app wants `Intl.Segmenter` to use a specific locale instead of the runti
 - Chat or messaging UIs: recompute bubble heights on every width change without touching the DOM layout engine.
 - Loading skeletons and cumulative layout shift reduction: reserve the right amount of vertical space before the final text renders.
 - Responsive card/layout decisions: switch between compact and expanded variants based on predicted text height.
-- Canvas or custom renderers: use `layoutWithLines()` to get browser-like wrapping plus per-line segment/grapheme cursors, without relying on DOM text nodes.
+- Canvas or custom renderers: use `layoutWithLines()` to get browser-like wrapping plus per-line segment/grapheme cursors, or `layoutNextLine()` to advance one line at a time through a prepared paragraph when your userland layout wants a different width on each row.
 
 ## Performance
 
@@ -104,6 +104,8 @@ bun run corpus-font-matrix --id=ar-risalat-al-ghufran-part-1 --samples=5  # samp
 
 Pages:
 - `/demo.html` — manual line-placement demo built on `layoutWithLines()`
+- `/columns.html` — three-column userland reflow demo built from one line layout pass
+- `/contour.html` — variable-width contour demo built on `layoutNextLine()`
 - `/accuracy.html` — sweep across fonts, sizes, widths, i18n texts
 - `/benchmark.html` — performance comparison
 - `/bubbles.html` — bubble shrinkwrap demo

@@ -927,6 +927,17 @@ Current shape:
 - Chrome `step=10` is still only `54/61 exact`
 - the remaining field is mostly opening-quote / punctuation compression plus one-line edge-fit cases, so Japanese is a real canary rather than a free win
 
+Broader Japanese follow-up:
+- a second prose canary from `蜘蛛の糸` stayed exact at the anchor widths, `8/9 exact` on the sampled Chrome sweep, and `56/61 exact` on Chrome `step=10`
+- targeted diagnostics at `450px` / `750px` showed the remaining Japanese field is not just another forgotten glue rule
+- on representative bad lines, the per-grapheme sum overshoots the full-string width by about `10px`, while adjacent-pair measurement is much closer
+- the recurring examples cluster around punctuation/quote compression (`さつき、「`, `ながら、`) and a few one-line edge fits
+
+Interpretation:
+- current Japanese misses are a real context-width class, not dirty data
+- they are good evidence for the exactness ceiling of a width-independent grapheme-sum model in proportional Japanese fonts
+- that makes Japanese a good stop signal: document the class, keep the canary, and do not paper it over with another narrow punctuation heuristic unless a broader fix emerges
+
 ## Sampled cross-font corpus matrix
 
 The first font-axis pass was lighter-weight on purpose: keep the same corpora and widths, but swap only

@@ -14,6 +14,7 @@ let prepare: LayoutModule['prepare']
 let prepareWithSegments: LayoutModule['prepareWithSegments']
 let layout: LayoutModule['layout']
 let layoutWithLines: LayoutModule['layoutWithLines']
+let layoutNextLine: LayoutModule['layoutNextLine']
 let clearCache: LayoutModule['clearCache']
 let setLocale: LayoutModule['setLocale']
 
@@ -80,7 +81,7 @@ class TestOffscreenCanvas {
 beforeAll(async () => {
   Reflect.set(globalThis, 'OffscreenCanvas', TestOffscreenCanvas)
   const mod = await import('./layout.ts')
-  ;({ prepare, prepareWithSegments, layout, layoutWithLines, clearCache, setLocale } = mod)
+  ;({ prepare, prepareWithSegments, layout, layoutWithLines, layoutNextLine, clearCache, setLocale } = mod)
 })
 
 beforeEach(() => {
@@ -361,5 +362,22 @@ describe('layout invariants', () => {
     expect(result.lineCount).toBeGreaterThanOrEqual(1)
     expect(result.height).toBe(result.lineCount * LINE_HEIGHT)
     expect(result.lines.map(line => line.text).join('')).toBe('According to محمد الأحمد, the results improved.')
+  })
+
+  test('layoutNextLine reproduces layoutWithLines exactly', () => {
+    const prepared = prepareWithSegments('foo trans\u00ADatlantic said "hello" to 世界 and waved.', FONT)
+    const width = prepared.widths[0]! + prepared.widths[1]! + prepared.widths[2]! + prepared.breakableWidths[4]![0]! + prepared.discretionaryHyphenWidth + 0.1
+    const expected = layoutWithLines(prepared, width, LINE_HEIGHT)
+
+    const actual = []
+    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    while (true) {
+      const line = layoutNextLine(prepared, cursor, width)
+      if (line === null) break
+      actual.push(line)
+      cursor = line.end
+    }
+
+    expect(actual).toEqual(expected.lines)
   })
 })
