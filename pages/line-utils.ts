@@ -22,9 +22,10 @@ export function collectLines(
 ): CollectedLines {
   const lines: LayoutLine[] = []
   let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const graphemeCache = new Map<number, string[]>()
 
   while (true) {
-    const line = layoutNextLine(prepared, cursor, maxWidth)
+    const line = layoutNextLine(prepared, cursor, maxWidth, graphemeCache)
     if (line === null) break
     lines.push(line)
     cursor = line.end
@@ -46,9 +47,10 @@ export function collectLineSlice(
 ): CollectedLineSlice {
   const lines: LayoutLine[] = []
   let cursor: LayoutCursor = start
+  const graphemeCache = new Map<number, string[]>()
 
   while (lines.length < maxLines) {
-    const line = layoutNextLine(prepared, cursor, maxWidth)
+    const line = layoutNextLine(prepared, cursor, maxWidth, graphemeCache)
     if (line === null) {
       return {
         lineCount: lines.length,

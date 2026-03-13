@@ -60,7 +60,7 @@ Tested across 4 fonts (Helvetica Neue, Georgia, Verdana, Courier New) × 8 sizes
 ## i18n
 
 - **Line breaking**: `Intl.Segmenter` with `granularity: 'word'` handles CJK (per-character breaks), Thai, Arabic, and all scripts the browser supports.
-- **Bidi**: Unicode Bidirectional Algorithm (UAX #9) for mixed LTR/RTL text. Pure LTR text fast-paths with zero overhead.
+- **Bidi metadata**: the rich `prepareWithSegments()` path can attach simplified UAX #9-style embedding levels for mixed LTR/RTL custom rendering. Line breaking itself does not consume those levels, and pure LTR text still fast-paths with zero extra bidi work.
 - **Shaping**: canvas `measureText()` uses the browser's font engine, so ligatures, kerning, and contextual forms (Arabic connected letters) are handled correctly.
 - **Emoji**: auto-corrected. Chrome/Firefox canvas inflates emoji widths at small font sizes on macOS; the library detects and compensates automatically.
 
@@ -79,7 +79,7 @@ Tested across 4 fonts (Helvetica Neue, Georgia, Verdana, Courier New) × 8 sizes
 2. **CJK splitting + kinsoku**: CJK word segments are re-split into individual graphemes, since CSS allows line breaks between any CJK characters. Kinsoku shori rules keep CJK punctuation (，。「」 etc.) attached to their adjacent characters so they can't be separated across line breaks.
 3. **Measurement + caching**: each final segment is measured via canvas `measureText()` and cached in a per-font segment-metrics cache. Common words across texts share not just widths but lazily-derived segment data such as grapheme widths for breakable words. The cache has no eviction — it grows monotonically per font string. For a typical single-font comment feed this is a few KB; `clearCache()` exists for manual eviction if needed.
 4. **Emoji correction**: canvas `measureText` inflates emoji widths on Chrome/Firefox at font sizes <24px on macOS. Auto-detected by measuring a reference emoji; correction subtracted per emoji grapheme. Safari is unaffected (correction = 0).
-5. **Bidi classification**: characters are classified into bidi types and embedding levels are computed. Pure LTR text skips this entirely.
+5. **Bidi metadata**: on the rich path, characters can be classified into bidi types and mapped to approximate embedding levels for custom rendering. Pure LTR text skips this entirely, and the line breaker itself does not read those levels.
 6. **Layout** (per resize): walk the cached widths, accumulate per line, break when exceeding `maxWidth`. Trailing whitespace hangs past the edge (CSS behavior). Non-space overflow (words, emoji, punctuation) triggers a line break. Segments wider than `maxWidth` are broken at grapheme boundaries.
 
 ## Research

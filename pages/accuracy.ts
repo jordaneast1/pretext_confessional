@@ -5,6 +5,7 @@ import {
   prepareWithSegments,
   type PreparedTextWithSegments,
 } from '../src/layout.ts'
+import { getDiagnosticUnits } from './diagnostic-utils.ts'
 import { TEXTS, SIZES, WIDTHS } from '../src/test-data.ts'
 
 const FONTS = [
@@ -66,7 +67,6 @@ declare global {
   }
 }
 
-const diagnosticGraphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 const params = new URLSearchParams(location.search)
 const requestId = params.get('requestId') ?? undefined
 const reportEl = document.createElement('pre')
@@ -114,34 +114,6 @@ function publishNavigationReport(report: AccuracyReport): void {
   const navigationReport: AccuracyNavigationReport = report
   const encoded = encodeURIComponent(JSON.stringify(navigationReport))
   history.replaceState(null, '', `${location.pathname}${location.search}#report=${encoded}`)
-}
-
-type DiagnosticUnit = {
-  text: string
-  start: number
-  end: number
-}
-
-function getDiagnosticUnits(prepared: PreparedTextWithSegments): DiagnosticUnit[] {
-  const units: DiagnosticUnit[] = []
-  let offset = 0
-
-  for (let i = 0; i < prepared.segments.length; i++) {
-    const segText = prepared.segments[i]!
-    if (prepared.breakableWidths[i] !== null) {
-      let localOffset = 0
-      for (const g of diagnosticGraphemeSegmenter.segment(segText)) {
-        const start = offset + localOffset
-        localOffset += g.segment.length
-        units.push({ text: g.segment, start, end: offset + localOffset })
-      }
-    } else {
-      units.push({ text: segText, start: offset, end: offset + segText.length })
-    }
-    offset += segText.length
-  }
-
-  return units
 }
 
 function getBrowserLines(

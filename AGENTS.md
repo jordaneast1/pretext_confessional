@@ -24,7 +24,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - `src/analysis.ts` — normalization, segmentation, glue rules, and text-analysis phase for `prepare()`
 - `src/measurement.ts` — canvas measurement runtime, segment metrics cache, emoji correction, and engine-profile shims
 - `src/line-break.ts` — internal line-walking core shared by the rich layout APIs and the hot-path line counter
-- `src/bidi.ts` — Unicode Bidirectional Algorithm helper for the rich `prepareWithSegments()` path
+- `src/bidi.ts` — simplified bidi metadata helper for the rich `prepareWithSegments()` path
 - `src/measure-harfbuzz.ts` — HarfBuzz backend kept for ad hoc measurement probes
 - `src/test-data.ts` — shared corpus for browser accuracy pages/checkers and benchmarks
 - `src/layout.test.ts` — small durable invariant tests for the exported prepare/layout APIs
@@ -33,6 +33,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - `pages/bubbles.ts` — bubble shrinkwrap demo using the rich non-materializing line-range walker
 - `pages/demo.ts` — manual line-placement demo built from repeated `layoutNextLine()` calls
 - `pages/dynamic-layout.ts` — fixed-height editorial spread with a continuous two-column flow, obstacle-aware title routing, and live logo-driven reflow
+- `pages/diagnostic-utils.ts` — shared grapheme-safe diagnostic helpers used by the browser check pages
 - `pages/line-utils.ts` — browser-demo helper that collects whole line arrays via repeated `layoutNextLine()` calls
 
 ### Implementation notes
@@ -60,7 +61,7 @@ Internal notes for contributors and agents. Use `README.md` as the public source
 - Non-word, non-space segments are break opportunities, same as words.
 - CJK grapheme splitting plus kinsoku merging keeps prohibited punctuation attached to adjacent graphemes.
 - Emoji correction is auto-detected per font size, constant per emoji grapheme, and effectively font-independent.
-- Bidi levels now stay on the rich `prepareWithSegments()` path. The opaque fast `prepare()` handle should not pay for bidi metadata that `layout()` does not consume.
+- Bidi levels now stay on the rich `prepareWithSegments()` path as custom-rendering metadata only. The opaque fast `prepare()` handle should not pay for bidi metadata that `layout()` does not consume, and line breaking itself does not read those levels.
 - Supported CSS target is the common app-text configuration: `white-space: normal`, `word-break: normal`, `overflow-wrap: break-word`, `line-break: auto`.
 - That default target means narrow widths may still break inside words, but only at grapheme boundaries. Keep the core engine honest to that behavior; if an editorial page wants stricter whole-word handling, layer it on top in userland instead of quietly changing the library default.
 - `system-ui` is unsafe for accuracy; canvas and DOM can resolve different fonts on macOS.

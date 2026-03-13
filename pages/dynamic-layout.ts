@@ -247,6 +247,7 @@ function layoutColumn(
   let cursor: LayoutCursor = startCursor
   let lineTop = region.y
   const lines: PositionedLine[] = []
+  const graphemeCache = new Map<number, string[]>()
 
   while (true) {
     if (lineTop + lineHeight > region.y + region.height) break
@@ -288,7 +289,7 @@ function layoutColumn(
       if (candidate.left < slot.left) slot = candidate
     }
     const width = slot.right - slot.left
-    const line = layoutNextLine(prepared, cursor, width)
+    const line = layoutNextLine(prepared, cursor, width, graphemeCache)
     if (line === null) break
 
     lines.push({

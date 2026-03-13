@@ -9,6 +9,7 @@ const FONT = '16px Test Sans'
 const LINE_HEIGHT = 19
 
 type LayoutModule = typeof import('./layout.ts')
+type LineBreakModule = typeof import('./line-break.ts')
 
 let prepare: LayoutModule['prepare']
 let prepareWithSegments: LayoutModule['prepareWithSegments']
@@ -18,6 +19,8 @@ let layoutNextLine: LayoutModule['layoutNextLine']
 let walkLineRanges: LayoutModule['walkLineRanges']
 let clearCache: LayoutModule['clearCache']
 let setLocale: LayoutModule['setLocale']
+let countPreparedLines: LineBreakModule['countPreparedLines']
+let walkPreparedLines: LineBreakModule['walkPreparedLines']
 
 const emojiPresentationRe = /\p{Emoji_Presentation}/u
 const punctuationRe = /[.,!?;:%)\]}'"”’»›…—-]/u
@@ -82,7 +85,9 @@ class TestOffscreenCanvas {
 beforeAll(async () => {
   Reflect.set(globalThis, 'OffscreenCanvas', TestOffscreenCanvas)
   const mod = await import('./layout.ts')
+  const lineBreakMod = await import('./line-break.ts')
   ;({ prepare, prepareWithSegments, layout, layoutWithLines, layoutNextLine, walkLineRanges, clearCache, setLocale } = mod)
+  ;({ countPreparedLines, walkPreparedLines } = lineBreakMod)
 })
 
 beforeEach(() => {
@@ -414,5 +419,26 @@ describe('layout invariants', () => {
       end: line.end,
       trailingDiscretionaryHyphen: line.trailingDiscretionaryHyphen,
     })))
+  })
+
+  test('countPreparedLines stays aligned with the walked line counter', () => {
+    const texts = [
+      'The quick brown fox jumps over the lazy dog.',
+      'said "hello" to 世界 and waved.',
+      'مرحبا، عالم؟',
+      'author 7:00-9:00 only',
+      'alpha\u200Bbeta gamma',
+    ]
+    const widths = [40, 80, 120, 200]
+
+    for (let textIndex = 0; textIndex < texts.length; textIndex++) {
+      const prepared = prepareWithSegments(texts[textIndex]!, FONT)
+      for (let widthIndex = 0; widthIndex < widths.length; widthIndex++) {
+        const width = widths[widthIndex]!
+        const counted = countPreparedLines(prepared, width)
+        const walked = walkPreparedLines(prepared, width)
+        expect(counted).toBe(walked)
+      }
+    }
   })
 })

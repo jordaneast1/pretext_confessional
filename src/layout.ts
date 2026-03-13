@@ -77,7 +77,7 @@ declare const preparedTextBrand: unique symbol
 type PreparedCore = {
   widths: number[] // Segment widths, e.g. [42.5, 4.4, 37.2]
   kinds: SegmentBreakKind[] // Break behavior per segment, e.g. ['text', 'space', 'text']
-  segLevels: Int8Array | null // Rich-path bidi embedding levels, else null
+  segLevels: Int8Array | null // Rich-path bidi metadata for custom rendering; layout() never reads it
   breakableWidths: (number[] | null)[] // Grapheme widths for overflow-wrap segments, else null
   discretionaryHyphenWidth: number // Visible width added when a soft hyphen is chosen as the break
 }
@@ -304,7 +304,7 @@ export function profilePrepare(text: string, font: string): PrepareProfile {
 //   5. Measure each segment via canvas measureText, cache by (segment, font)
 //   6. Pre-measure graphemes of long words (for overflow-wrap: break-word)
 //   7. Correct emoji canvas inflation (auto-detected per font size)
-//   8. Optionally compute bidi embedding levels for the rich path
+//   8. Optionally compute rich-path bidi metadata for custom renderers
 export function prepare(text: string, font: string): PreparedText {
   return prepareInternal(text, font, false) as PreparedText
 }
@@ -456,10 +456,10 @@ export function layoutNextLine(
   prepared: PreparedTextWithSegments,
   start: LayoutCursor,
   maxWidth: number,
+  graphemeCache: Map<number, string[]> = new Map<number, string[]>(),
 ): LayoutLine | null {
   const line = layoutNextLineRange(prepared, start, maxWidth)
   if (line === null) return null
-  const graphemeCache = new Map<number, string[]>()
   return materializeLayoutLine(prepared, graphemeCache, line)
 }
 

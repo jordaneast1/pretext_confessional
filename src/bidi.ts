@@ -1,6 +1,8 @@
-// Unicode Bidirectional Algorithm (UAX #9), forked from pdf.js via Sebastian's
-// text-layout. Classifies characters into bidi types, computes embedding levels,
-// and maps them onto prepared segments for the rich prepareWithSegments() path.
+// Simplified bidi metadata helper for the rich prepareWithSegments() path,
+// forked from pdf.js via Sebastian's text-layout. It classifies characters
+// into bidi types, computes embedding levels, and maps them onto prepared
+// segments for custom rendering. The line-breaking engine does not consume
+// these levels.
 
 type BidiType = 'L' | 'R' | 'AL' | 'AN' | 'EN' | 'ES' | 'ET' | 'CS' |
                 'ON' | 'BN' | 'B' | 'S' | 'WS' | 'NSM'

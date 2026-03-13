@@ -4,6 +4,12 @@ import {
   prepareWithSegments,
   type PreparedTextWithSegments,
 } from '../src/layout.ts'
+import {
+  formatBreakContext,
+  getDiagnosticUnits,
+  getLineContent,
+  measureCanvasTextWidth,
+} from './diagnostic-utils.ts'
 
 const book = document.getElementById('book')!
 const slider = document.getElementById('slider') as HTMLInputElement
@@ -206,17 +212,6 @@ function parseInitialWidth(): number {
   return Math.max(min, Math.min(max, fallback))
 }
 
-type DiagnosticUnit = {
-  text: string
-  start: number
-  end: number
-}
-
-function measureFullTextWidth(text: string): number {
-  diagnosticCtx.font = FONT
-  return diagnosticCtx.measureText(text).width
-}
-
 function withRequestId<T extends GatsbyReport>(report: T): GatsbyReport {
   return requestId === undefined ? report : { ...report, requestId }
 }
@@ -261,42 +256,6 @@ function publishNavigationReport(report: GatsbyReport): void {
   const navigationReport = toNavigationReport(report)
   const encoded = encodeURIComponent(JSON.stringify(navigationReport))
   history.replaceState(null, '', `${location.pathname}${location.search}#report=${encoded}`)
-}
-
-function formatBreakContext(text: string, breakOffset: number, radius = 32): string {
-  const start = Math.max(0, breakOffset - radius)
-  const end = Math.min(text.length, breakOffset + radius)
-  return `${start > 0 ? '…' : ''}${text.slice(start, breakOffset)}|${text.slice(breakOffset, end)}${end < text.length ? '…' : ''}`
-}
-
-function getLineContent(text: string, end: number): { text: string, end: number } {
-  const trimmed = text.trimEnd()
-  return {
-    text: trimmed,
-    end: end - (text.length - trimmed.length),
-  }
-}
-
-function getDiagnosticUnits(preparedText: PreparedTextWithSegments): DiagnosticUnit[] {
-  const units: DiagnosticUnit[] = []
-  let offset = 0
-
-  for (let i = 0; i < preparedText.segments.length; i++) {
-    const segText = preparedText.segments[i]!
-    if (preparedText.breakableWidths[i] !== null) {
-      let localOffset = 0
-      for (const g of diagnosticGraphemeSegmenter.segment(segText)) {
-        const start = offset + localOffset
-        localOffset += g.segment.length
-        units.push({ text: g.segment, start, end: offset + localOffset })
-      }
-    } else {
-      units.push({ text: segText, start: offset, end: offset + segText.length })
-    }
-    offset += segText.length
-  }
-
-  return units
 }
 
 function buildSegmentSpans(preparedText: PreparedTextWithSegments): SegmentSpan[] {
@@ -449,8 +408,8 @@ function getBrowserLines(
       start: currentStart,
       end: currentEnd,
       contentEnd: content.end,
-      fullWidth: measureFullTextWidth(content.text),
-      rawFullWidth: measureFullTextWidth(currentLine),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, FONT),
+      rawFullWidth: measureCanvasTextWidth(diagnosticCtx, currentLine, FONT),
       domWidth: lineRange.getBoundingClientRect().width,
       rawDomWidth,
     })
@@ -503,8 +462,8 @@ function getOurLines(
       end,
       contentEnd: content.end,
       sumWidth: line.width,
-      fullWidth: measureFullTextWidth(content.text),
-      rawFullWidth: measureFullTextWidth(normalizedText.slice(start, end)),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, FONT),
+      rawFullWidth: measureCanvasTextWidth(diagnosticCtx, normalizedText.slice(start, end), FONT),
     })
     rawOffset = end
   }

@@ -3,6 +3,13 @@ import {
   prepareWithSegments,
   type PreparedTextWithSegments,
 } from '../src/layout.ts'
+import {
+  formatBreakContext,
+  getDiagnosticUnits,
+  getLineContent,
+  measureCanvasTextWidth,
+  measureDomTextWidth,
+} from './diagnostic-utils.ts'
 
 type ProbeLine = {
   text: string
@@ -130,62 +137,6 @@ function setError(message: string): void {
   publishReport(withRequestId({ status: 'error', message }))
 }
 
-function measureCanvasText(textToMeasure: string, measuredFont: string): number {
-  diagnosticCtx.font = measuredFont
-  return diagnosticCtx.measureText(textToMeasure).width
-}
-
-function measureDomText(textToMeasure: string, measuredFont: string, dir: string): number {
-  const span = document.createElement('span')
-  span.style.position = 'absolute'
-  span.style.visibility = 'hidden'
-  span.style.whiteSpace = 'pre'
-  span.style.font = measuredFont
-  span.style.direction = dir
-  span.style.unicodeBidi = 'plaintext'
-  span.textContent = textToMeasure
-  document.body.appendChild(span)
-  const measured = span.getBoundingClientRect().width
-  document.body.removeChild(span)
-  return measured
-}
-
-function getLineContent(lineText: string, end: number): { text: string, end: number } {
-  const trimmed = lineText.trimEnd()
-  return {
-    text: trimmed,
-    end: end - (lineText.length - trimmed.length),
-  }
-}
-
-function formatBreakContext(fullText: string, breakOffset: number, radius = 24): string {
-  const start = Math.max(0, breakOffset - radius)
-  const end = Math.min(fullText.length, breakOffset + radius)
-  return `${start > 0 ? '…' : ''}${fullText.slice(start, breakOffset)}|${fullText.slice(breakOffset, end)}${end < fullText.length ? '…' : ''}`
-}
-
-function getDiagnosticUnits(prepared: PreparedTextWithSegments): Array<{ text: string, start: number, end: number }> {
-  const units: Array<{ text: string, start: number, end: number }> = []
-  let offset = 0
-
-  for (let i = 0; i < prepared.segments.length; i++) {
-    const segment = prepared.segments[i]!
-    if (prepared.breakableWidths[i] !== null) {
-      let localOffset = 0
-      for (const grapheme of graphemeSegmenter.segment(segment)) {
-        const start = offset + localOffset
-        localOffset += grapheme.segment.length
-        units.push({ text: grapheme.segment, start, end: offset + localOffset })
-      }
-    } else {
-      units.push({ text: segment, start: offset, end: offset + segment.length })
-    }
-    offset += segment.length
-  }
-
-  return units
-}
-
 function getBrowserLines(prepared: PreparedTextWithSegments, measuredFont: string, dir: string): ProbeLine[] {
   return browserLineMethod === 'span'
     ? getBrowserLinesFromSpans(prepared, measuredFont, dir)
@@ -219,8 +170,8 @@ function getBrowserLinesFromSpans(prepared: PreparedTextWithSegments, measuredFo
       start: currentStart,
       end: currentEnd,
       contentEnd: content.end,
-      fullWidth: measureCanvasText(content.text, measuredFont),
-      domWidth: measureDomText(content.text, measuredFont, dir),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, measuredFont),
+      domWidth: measureDomTextWidth(document, content.text, measuredFont, dir),
     })
   }
 
@@ -271,8 +222,8 @@ function getBrowserLinesFromRange(prepared: PreparedTextWithSegments, measuredFo
       start: currentStart,
       end: currentEnd,
       contentEnd: content.end,
-      fullWidth: measureCanvasText(content.text, measuredFont),
-      domWidth: measureDomText(content.text, measuredFont, dir),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, measuredFont),
+      domWidth: measureDomTextWidth(document, content.text, measuredFont, dir),
     })
   }
 
@@ -330,7 +281,7 @@ function measurePreparedSlice(
     if (localStart === 0 && localEnd === segment.length) {
       total += prepared.widths[i]!
     } else {
-      total += measureCanvasText(segment.slice(localStart, localEnd), measuredFont)
+      total += measureCanvasTextWidth(diagnosticCtx, segment.slice(localStart, localEnd), measuredFont)
     }
 
     offset = nextOffset
@@ -368,8 +319,8 @@ function getOurLines(
       start: lineStart,
       end: lineEnd,
       contentEnd: content.end,
-      fullWidth: measureCanvasText(content.text, measuredFont),
-      domWidth: measureDomText(content.text, measuredFont, direction),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, measuredFont),
+      domWidth: measureDomTextWidth(document, content.text, measuredFont, direction),
       sumWidth: measurePreparedSlice(prepared, lineStart, content.end, measuredFont),
     })
     hasContent = false

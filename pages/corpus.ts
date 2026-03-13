@@ -4,6 +4,13 @@ import {
   prepareWithSegments,
   type PreparedTextWithSegments,
 } from '../src/layout.ts'
+import {
+  formatBreakContext,
+  getDiagnosticUnits,
+  getLineContent,
+  measureCanvasTextWidth,
+  measureDomTextWidth,
+} from './diagnostic-utils.ts'
 import sourcesData from '../corpora/sources.json' with { type: 'json' }
 import arAlBukhala from '../corpora/ar-al-bukhala.txt' with { type: 'text' }
 import arRisalatAlGhufranPart1 from '../corpora/ar-risalat-al-ghufran-part-1.txt' with { type: 'text' }
@@ -125,12 +132,6 @@ type DiagnosticLine = {
   sumWidth?: number
   domWidth?: number
   rawDomWidth?: number
-}
-
-type DiagnosticUnit = {
-  text: string
-  start: number
-  end: number
 }
 
 const rangeProbeScriptRe = /[\u0E00-\u0E7F\u0E80-\u0EFF\u1000-\u109F\u1780-\u17FF]/u
@@ -291,47 +292,6 @@ function estimateBrowserLineCount(actualHeight: number, lineHeight: number): num
   return Math.max(0, Math.round(contentHeight / lineHeight))
 }
 
-function measureFullTextWidth(text: string, font: string): number {
-  diagnosticCtx.font = font
-  return diagnosticCtx.measureText(text).width
-}
-
-function formatBreakContext(text: string, breakOffset: number, radius = 32): string {
-  const start = Math.max(0, breakOffset - radius)
-  const end = Math.min(text.length, breakOffset + radius)
-  return `${start > 0 ? '…' : ''}${text.slice(start, breakOffset)}|${text.slice(breakOffset, end)}${end < text.length ? '…' : ''}`
-}
-
-function getLineContent(text: string, end: number): { text: string, end: number } {
-  const trimmed = text.trimEnd()
-  return {
-    text: trimmed,
-    end: end - (text.length - trimmed.length),
-  }
-}
-
-function getDiagnosticUnits(prepared: PreparedTextWithSegments): DiagnosticUnit[] {
-  const units: DiagnosticUnit[] = []
-  let offset = 0
-
-  for (let i = 0; i < prepared.segments.length; i++) {
-    const text = prepared.segments[i]!
-    if (prepared.breakableWidths[i] !== null) {
-      let localOffset = 0
-      for (const g of diagnosticGraphemeSegmenter.segment(text)) {
-        const start = offset + localOffset
-        localOffset += g.segment.length
-        units.push({ text: g.segment, start, end: offset + localOffset })
-      }
-    } else {
-      units.push({ text, start: offset, end: offset + text.length })
-    }
-    offset += text.length
-  }
-
-  return units
-}
-
 function pushDiagnosticLine(
   lines: DiagnosticLine[],
   text: string,
@@ -350,10 +310,10 @@ function pushDiagnosticLine(
     start,
     end,
     contentEnd: content.end,
-    fullWidth: measureFullTextWidth(content.text, font),
-    rawFullWidth: measureFullTextWidth(normalizedText.slice(start, end), font),
-    domWidth: measureDomTextWidth(content.text, font, direction),
-    rawDomWidth: measureDomTextWidth(normalizedText.slice(start, end), font, direction),
+    fullWidth: measureCanvasTextWidth(diagnosticCtx, content.text, font),
+    rawFullWidth: measureCanvasTextWidth(diagnosticCtx, normalizedText.slice(start, end), font),
+    domWidth: measureDomTextWidth(document, content.text, font, direction),
+    rawDomWidth: measureDomTextWidth(document, normalizedText.slice(start, end), font, direction),
   })
 }
 
@@ -448,21 +408,6 @@ function getBrowserLinesFromRange(
   return { lines: browserLines, height: div.getBoundingClientRect().height }
 }
 
-function measureDomTextWidth(text: string, font: string, direction: string): number {
-  const span = document.createElement('span')
-  span.style.position = 'absolute'
-  span.style.visibility = 'hidden'
-  span.style.whiteSpace = 'pre'
-  span.style.font = font
-  span.style.direction = direction
-  span.style.unicodeBidi = 'plaintext'
-  span.textContent = text
-  document.body.appendChild(span)
-  const width = span.getBoundingClientRect().width
-  document.body.removeChild(span)
-  return width
-}
-
 function getCursorOffset(prepared: PreparedTextWithSegments, segmentIndex: number, graphemeIndex: number): number {
   let offset = 0
   for (let i = 0; i < segmentIndex; i++) {
@@ -503,8 +448,8 @@ function getOurLines(
       end,
       contentEnd: content.end,
       sumWidth: line.width,
-      fullWidth: measureFullTextWidth(renderedContentText, font),
-      rawFullWidth: measureFullTextWidth(line.text, font),
+      fullWidth: measureCanvasTextWidth(diagnosticCtx, renderedContentText, font),
+      rawFullWidth: measureCanvasTextWidth(diagnosticCtx, line.text, font),
     }
   })
 }
@@ -525,7 +470,7 @@ function getLineSegments(
       segments.push({
         text,
         width: prepared.widths[i]!,
-        domWidth: measureDomTextWidth(text, font, direction),
+        domWidth: measureDomTextWidth(document, text, font, direction),
         isSpace: prepared.kinds[i] === 'space',
       })
     }
@@ -547,7 +492,7 @@ function measurePairAdjustedWidth(
   for (let i = 1; i < segments.length; i++) {
     const prev = segments[i - 1]!
     const next = segments[i]!
-    total += measureDomTextWidth(prev.text + next.text, font, direction) - prev.domWidth - next.domWidth
+    total += measureDomTextWidth(document, prev.text + next.text, font, direction) - prev.domWidth - next.domWidth
   }
   return total
 }
@@ -612,7 +557,7 @@ function getFirstBreakMismatch(
         deltaText: normalizedText.slice(minEnd, maxEnd),
         reasonGuess: classifyBreakMismatch(contentWidth, ours, browser),
         oursSumWidth: ours?.sumWidth ?? 0,
-        oursDomWidth: ours ? measureDomTextWidth(ours.contentText, font, direction) : 0,
+        oursDomWidth: ours ? measureDomTextWidth(document, ours.contentText, font, direction) : 0,
         oursFullWidth: ours?.fullWidth ?? 0,
         browserDomWidth: browser?.domWidth ?? 0,
         browserFullWidth: browser?.fullWidth ?? 0,
@@ -761,7 +706,7 @@ function addDiagnostics(
           text: ours.contentText,
           sumWidth: ours.sumWidth ?? ours.fullWidth,
           fullWidth: ours.fullWidth,
-          domWidth: measureDomTextWidth(ours.contentText, font, direction),
+          domWidth: measureDomTextWidth(document, ours.contentText, font, direction),
           pairAdjustedWidth: measurePairAdjustedWidth(segments, font, direction),
           segments,
         }
