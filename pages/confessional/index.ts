@@ -2,15 +2,20 @@ import { prepare, layout, type PreparedText } from '../../src/layout.ts'
 import rawThoughts from './shower-thoughts.json'
 
 // --- config ---
-const font = '15px "Helvetica Neue", Helvetica, Arial, sans-serif'
-const lineHeight = 22
+const questionFont = '30px "Helvetica Neue", Helvetica, Arial, sans-serif'
+const answerFont = '16px "Helvetica Neue", Helvetica, Arial, sans-serif'
+const questionLineHeight = 38
+const answerLineHeight = 22
 const cardPadding = 16
-const gap = 12
-const maxColWidth = 400
-const singleColumnMaxViewportWidth = 520
+const gap = 1
+const maxColWidth = 1200
+const singleColumnMaxViewportWidth = 1520
 
 type Card = {
   text: string
+  type: 'question' | 'answer'
+  font: string
+  lineHeight: number
   prepared: PreparedText
 }
 
@@ -33,10 +38,22 @@ type State = {
 
 // --- prepare all texts upfront ---
 const st: State = {
-  cards: rawThoughts.map(text => ({
-    text,
-    prepared: prepare(text, font),
-  })),
+  cards: [
+    ...rawThoughts.questions.map(text => ({
+      text,
+      type: 'question' as const,
+      font: questionFont,
+      lineHeight: questionLineHeight,
+      prepared: prepare(text, questionFont),
+    })),
+    ...rawThoughts.answers.map(text => ({
+      text,
+      type: 'answer' as const,
+      font: answerFont,
+      lineHeight: answerLineHeight,
+      prepared: prepare(text, answerFont),
+    })),
+  ],
 }
 
 type DomCache = {
@@ -77,7 +94,7 @@ function computeLayout(windowWidth: number): LayoutState {
       if (colHeights[c]! < colHeights[shortest]!) shortest = c
     }
 
-    const { height } = layout(st.cards[i]!.prepared, textWidth, lineHeight)
+    const { height } = layout(st.cards[i]!.prepared, textWidth, st.cards[i]!.lineHeight)
     const totalH = height + cardPadding * 2
 
     positionedCards.push({
@@ -103,12 +120,41 @@ function getOrCreateCardNode(cardIndex: number): HTMLDivElement {
   if (existingNode) return existingNode
 
   const node = document.createElement('div')
-  node.className = 'card'
+  node.className = `card ${st.cards[cardIndex]!.type}`
+  if (cardIndex === selectedCardIndex) node.classList.add('selected')
   node.textContent = st.cards[cardIndex]!.text
+  node.addEventListener('click', () => selectCard(cardIndex))
   domCache.container.appendChild(node)
   domCache.cards[cardIndex] = node
   return node
 }
+
+// --- card editing ---
+let selectedCardIndex: number | null = null
+const cardInput = document.getElementById('card-input') as HTMLInputElement
+
+function updateCard(cardIndex: number, newText: string) {
+  const card = st.cards[cardIndex]!
+  st.cards[cardIndex] = { ...card, text: newText, prepared: prepare(newText, card.font) }
+  const node = domCache.cards[cardIndex]
+  if (node) node.textContent = newText
+  scheduleRender()
+}
+
+function selectCard(cardIndex: number) {
+  if (selectedCardIndex !== null) {
+    domCache.cards[selectedCardIndex]?.classList.remove('selected')
+  }
+  selectedCardIndex = cardIndex
+  domCache.cards[cardIndex]?.classList.add('selected')
+  cardInput.value = st.cards[cardIndex]!.text
+  cardInput.focus()
+}
+
+cardInput.addEventListener('input', () => {
+  if (selectedCardIndex === null) return
+  updateCard(selectedCardIndex, cardInput.value)
+})
 
 // --- events ---
 window.addEventListener('resize', () => scheduleRender())
